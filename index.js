@@ -1,13 +1,12 @@
 const { sha3, BN } = require("web3-utils");
 const abiCoder = require("web3-eth-abi");
 
-const state = {
-  savedABIs: [],
-  methodIDs: {},
-};
+let stateByKey = {};
 
-function _getABIs() {
-  return state.savedABIs;
+function _getABIs(key) {
+  if (stateByKey[key]) {
+    return stateByKey[key].savedABIs;
+  }
 }
 
 function _typeToString(input) {
@@ -17,7 +16,11 @@ function _typeToString(input) {
   return input.type;
 }
 
-function _addABI(abiArray) {
+function _addABI(key, abiArray) {
+  const state = {
+    savedABIs: [],
+    methodIDs: {},
+  };
 
   if (Array.isArray(abiArray)) {
     // Iterate new abi to generate method id"s
@@ -39,50 +42,35 @@ function _addABI(abiArray) {
       }
     });
 
-    state.savedABIs = state.savedABIs.concat(abiArray);
+    state.savedABIs = abiArray;
+
+    stateByKey[key] = state;
   } else {
     throw new Error("Expected ABI array, got " + typeof abiArray);
   }
 }
 
-function _removeABI(abiArray) {
-  if (Array.isArray(abiArray)) {
-    // Iterate new abi to generate method id"s
-    abiArray.map(function(abi) {
-      if (abi.name) {
-        const signature = sha3(
-          abi.name +
-            "(" +
-            abi.inputs
-              .map(function(input) {
-                return input.type;
-              })
-              .join(",") +
-            ")"
-        );
-        if (abi.type === "event") {
-          if (state.methodIDs[signature.slice(2)]) {
-            delete state.methodIDs[signature.slice(2)];
-          }
-        } else {
-          if (state.methodIDs[signature.slice(2, 10)]) {
-            delete state.methodIDs[signature.slice(2, 10)];
-          }
-        }
-      }
-    });
-  } else {
-    throw new Error("Expected ABI array, got " + typeof abiArray);
+function _removeABI(key) {
+  delete stateByKey[key];
+}
+
+function _removeAllABIs() {
+  stateByKey = {};
+}
+
+function _getMethodIDs(key) {
+  if (stateByKey[key]) {
+    return stateByKey[key].methodIDs;
   }
 }
 
-function _getMethodIDs() {
-  return state.methodIDs;
-}
+function _decodeMethod(key, data) {
+  if (!stateByKey[key]) {
+    return;
+  }
 
-function _decodeMethod(data) {
   const methodID = data.slice(2, 10);
-  const abiItem = state.methodIDs[methodID];
+  const abiItem = stateByKey[key].methodIDs[methodID];
   if (abiItem) {
     let decoded = abiCoder.decodeParameters(abiItem.inputs, data.slice(10));
 
@@ -130,10 +118,14 @@ function _decodeMethod(data) {
   }
 }
 
-function _decodeLogs(logs) {
+function _decodeLogs(key, logs) {
+  if (!stateByKey[key]) {
+    return;
+  }
+
   return logs.filter(log => log.topics.length > 0).map((logItem) => {
     const methodID = logItem.topics[0].slice(2);
-    const method = state.methodIDs[methodID];
+    const method = stateByKey[key].methodIDs[methodID];
     if (method) {
       const logData = logItem.data;
       let decodedParams = [];
@@ -211,4 +203,5 @@ module.exports = {
   decodeMethod: _decodeMethod,
   decodeLogs: _decodeLogs,
   removeABI: _removeABI,
+  removeAllABIs: _removeAllABIs,
 };
