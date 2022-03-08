@@ -118,12 +118,8 @@ function _decodeMethod(key, data) {
   }
 }
 
-function _decodeLogs(key, logs) {
-  if (!stateByKey[key]) {
-    return;
-  }
-
-  return logs.filter(log => log.topics.length > 0).map((logItem) => {
+function _decodeLogItem(key, logItem) {
+  if (stateByKey[key] && logItem.topics.length > 0) {
     const methodID = logItem.topics[0].slice(2);
     const method = stateByKey[key].methodIDs[methodID];
     if (method) {
@@ -193,7 +189,14 @@ function _decodeLogs(key, logs) {
         address: logItem.address,
       };
     }
-  });
+  }
+}
+
+function _decodeLogs(key, logs) {
+  const result = logs.map(logItem => _decodeLogItem(key, logItem)).filter(decoded => decoded);
+  if (result.length > 0) {
+    return result;
+  }
 }
 
 module.exports = {
@@ -202,6 +205,7 @@ module.exports = {
   getMethodIDs: _getMethodIDs,
   decodeMethod: _decodeMethod,
   decodeLogs: _decodeLogs,
+  decodeLogItem: _decodeLogItem,
   removeABI: _removeABI,
   removeAllABIs: _removeAllABIs,
 };
