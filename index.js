@@ -16,6 +16,10 @@ function _typeToString(input) {
   return input.type;
 }
 
+function _hasABI(key) {
+  return stateByKey[key];
+}
+
 function _addABI(key, abiArray) {
   const state = {
     savedABIs: [],
@@ -200,6 +204,7 @@ function _decodeLogs(key, logs) {
 }
 
 module.exports = {
+  hasABI: _hasABI,
   getABIs: _getABIs,
   addABI: _addABI,
   getMethodIDs: _getMethodIDs,

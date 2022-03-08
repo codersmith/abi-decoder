@@ -304,4 +304,16 @@ describe("abi decoder", function () {
     expect(decodedLog.events[2].type).to.equal("uint256");
   });
 
+  it("has abi for non-existent key", () => {
+    abiDecoder.addABI("this-key", abiV2);
+    const hasABI = abiDecoder.hasABI("other-key");
+    expect(hasABI).to.not.exist;
+  });
+
+  it("has abi", () => {
+    abiDecoder.addABI("this-key", abiV2);
+    const hasABI = abiDecoder.hasABI("this-key");
+    expect(hasABI).to.exist;
+  });
+
 });
