@@ -1,4 +1,5 @@
-const { sha3, BN } = require("web3-utils");
+const BN = require("bn.js");
+const { sha3 } = require("web3-utils");
 const abiCoder = require("web3-eth-abi");
 
 let stateByKey = {};
