@@ -1,12 +1,19 @@
 const BN = require("bn.js");
 const { sha3 } = require("web3-utils");
 const abiCoder = require("web3-eth-abi");
+const { getCache } = require("./src/lib/ttlcache.js");
 
-let stateByKey = {};
+const ONE_DAY_IN_SECONDS = 24 * 60 * 60 * 1000;
+let stateByKey = getCache(ONE_DAY_IN_SECONDS);
+
+function _setCacheTimeout(ttlms) {
+  stateByKey = getCache(ttlms);
+}
 
 function _getABIs(key) {
-  if (stateByKey[key]) {
-    return stateByKey[key].savedABIs;
+  const state = stateByKey.get(key);
+  if (state) {
+    return state.savedABIs;
   }
 }
 
@@ -18,7 +25,10 @@ function _typeToString(input) {
 }
 
 function _hasABI(key) {
-  return stateByKey[key];
+  // return undef in case it doesn't exist, vs. false
+  if (stateByKey.has(key)) {
+    return true;
+  }
 }
 
 function _addABI(key, abiArray) {
@@ -29,15 +39,15 @@ function _addABI(key, abiArray) {
 
   if (Array.isArray(abiArray)) {
     // Iterate new abi to generate method id"s
-    abiArray.map(function(abi) {
+    abiArray.map(function (abi) {
       if (abi.name) {
         const signature = sha3(
           abi.name +
-            "(" +
-            abi.inputs
-              .map(_typeToString)
-              .join(",") +
-            ")"
+          "(" +
+          abi.inputs
+            .map(_typeToString)
+            .join(",") +
+          ")"
         );
         if (abi.type === "event") {
           state.methodIDs[signature.slice(2)] = abi;
@@ -49,33 +59,35 @@ function _addABI(key, abiArray) {
 
     state.savedABIs = abiArray;
 
-    stateByKey[key] = state;
+    stateByKey.set(key, state);
   } else {
     throw new Error("Expected ABI array, got " + typeof abiArray);
   }
 }
 
 function _removeABI(key) {
-  delete stateByKey[key];
+  stateByKey.delete(key);
 }
 
 function _removeAllABIs() {
-  stateByKey = {};
+  stateByKey.clear();
 }
 
 function _getMethodIDs(key) {
-  if (stateByKey[key]) {
-    return stateByKey[key].methodIDs;
+  const state = stateByKey.get(key);
+  if (state) {
+    return state.methodIDs;
   }
 }
 
 function _decodeMethod(key, data) {
-  if (!stateByKey[key]) {
+  const state = stateByKey.get(key);
+  if (!state) {
     return;
   }
 
   const methodID = data.slice(2, 10);
-  const abiItem = stateByKey[key].methodIDs[methodID];
+  const abiItem = state.methodIDs[methodID];
   if (abiItem) {
     let decoded = abiCoder.decodeParameters(abiItem.inputs, data.slice(10));
 
@@ -124,9 +136,14 @@ function _decodeMethod(key, data) {
 }
 
 function _decodeLogItem(key, logItem) {
-  if (stateByKey[key] && logItem.topics.length > 0) {
+  const state = stateByKey.get(key);
+  if (!state) {
+    return;
+  }
+
+  if (logItem.topics.length > 0) {
     const methodID = logItem.topics[0].slice(2);
-    const method = stateByKey[key].methodIDs[methodID];
+    const method = state.methodIDs[methodID];
     if (method) {
       const logData = logItem.data;
       let decodedParams = [];
@@ -134,7 +151,7 @@ function _decodeLogItem(key, logItem) {
       let topicsIndex = 1;
 
       let dataTypes = [];
-      method.inputs.map(function(input) {
+      method.inputs.map(function (input) {
         if (!input.indexed) {
           dataTypes.push(input.type);
         }
@@ -146,7 +163,7 @@ function _decodeLogItem(key, logItem) {
       );
 
       // Loop topic and data to get the params
-      method.inputs.map(function(param) {
+      method.inputs.map(function (param) {
         let decodedP = {
           name: param.name,
           type: param.type,
@@ -205,6 +222,7 @@ function _decodeLogs(key, logs) {
 }
 
 module.exports = {
+  setCacheTimeout: _setCacheTimeout,
   hasABI: _hasABI,
   getABIs: _getABIs,
   addABI: _addABI,
